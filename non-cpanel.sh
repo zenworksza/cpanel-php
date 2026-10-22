@@ -141,7 +141,7 @@ if [ "$DOCKER" = 1 ] && command -v docker >/dev/null 2>&1 && docker info >/dev/n
     printf '%-26s %-36s php %-8s %-8s image built %s%s\n' "$name" "$img" "$pv" "$s" "${built:-?}" "$x"
   done
   [ $withphp = 0 ] && echo "none of $total running containers has PHP"
-  [ $cexp = 1 ] && echo "FIX: pull/rebuild the image and recreate (e.g. docker compose pull && docker compose up -d --force-recreate). A plain restart keeps the old image."
+    [ $cexp = 1 ] && echo "FIX: registry images: docker compose pull && docker compose up -d --force-recreate | locally built images: docker compose build --pull --no-cache <service> && docker compose up -d --force-recreate <service> | a plain restart or cached rebuild keeps the old PHP"
 else
   if [ "$DOCKER" = 0 ]; then echo "skipped (--no-docker)"
   elif ! command -v docker >/dev/null 2>&1; then echo "docker not installed - no containers to scan"
