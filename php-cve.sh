@@ -66,11 +66,12 @@ fi
 echo "-- Accounts on EXPOSED/IGNORED PHP versions"
 if [ ${#STATUS[@]} -eq 0 ]; then echo "none (no exposed or ignored versions)"; fi
 for k in $(printf '%s\n' "${!STATUS[@]}" | sort); do
-  case $k in
+case $k in
     alt-php[0-9]*) d=${k#alt-php}; ver="${d:0:1}.${d:1}"
-      users=$(selectorctl --list-users --version "$ver" 2>/dev/null | grep -v '^[[:space:]]*$') ;;
+      users=$(selectorctl --list-users --version "$ver" 2>/dev/null | tr ',' ' ' | xargs -r -n1) ;;
     ea-php[0-9]*)
-     users=$(selectorctl --list-users --version "$ver" 2>/dev/null | tr ',' ' ' | xargs -r -n1) ;;
+      users=$(grep -lE "^phpversion: $k\$" /var/cpanel/userdata/*/* 2>/dev/null | awk -F/ '{print $5}' | sort -u) ;;
+    *) printf '%-14s %-8s n/a (internal tooling, no customer accounts)\n' "$k" "${STATUS[$k]}"; continue ;;
   esac
   n=$(printf '%s' "$users" | grep -c .)
   printf '%-14s %-8s %s user(s)' "$k" "${STATUS[$k]}" "$n"
