@@ -113,10 +113,37 @@ if [ "$FIX" = 1 ] && [ -n "${!units[*]}" ]; then echo "restarting: ${!units[*]}"
 [ -n "$manual" ] && echo "MANUAL restart needed (web server):$manual"
 
 echo "-- Docker containers with PHP (running only; read-only docker exec checks)"
+PROBE_PHP='for b in php php-fpm /usr/local/bin/php /usr/local/sbin/php-fpm /usr/bin/php[0-9]* /usr/sbin/php-fpm[0-9]*; do command -v "$b" >/dev/null 2>&1 || [ -x "$b" ] || continue; v=$("$b" -n -v 2>/dev/null | head -1); echo "$v" | grep -qE "^PHP [0-9]" && { echo "$v"; break; }; done'
+PROBE_CL='zcat /usr/share/doc/php*/changelog*.gz 2>/dev/null | grep -qE "CVE-2026-10961[89]" && echo Y; rpm -q --changelog php-cli php-fpm 2>/dev/null | grep -qE "CVE-2026-10961[89]" && echo Y'
+PROBE_MP='apache2ctl -M 2>/dev/null || apachectl -M 2>/dev/null || httpd -M 2>/dev/null'
 if [ "$DOCKER" = 1 ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   total=0; withphp=0
   for c in $(docker ps -q); do
     total=$((total+1))
     pv=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$c" | sed -n 's/^PHP_VERSION=//p' | head -1)
     if [ -z "$pv" ]; then
-      pv=$(timeout 15
+      pv=$(timeout 15 docker exec "$c" sh -c "$PROBE_PHP" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+    [ -z "$pv" ] && continue
+    withphp=$((withphp+1))
+    name=$(docker inspect -f '{{.Name}}' "$c"); name=${name#/}
+    img=$(docker inspect -f '{{.Config.Image}}' "$c")
+    iid=$(docker inspect -f '{{.Image}}' "$c")
+    built=$(docker image inspect -f '{{.Created}}' "$iid" 2>/dev/null | cut -c1-10)
+    s=EXPOSED; ver_ok "$pv" && s=PATCHED
+    if [ "$s" = EXPOSED ]; then
+      cl=$(timeout 15 docker exec "$c" sh -c "$PROBE_CL" 2>/dev/null)
+      [[ $cl == *Y* ]] && s=PATCHED
+    fi
+    x=""
+    timeout 15 docker exec "$c" sh -c "$PROBE_MP" 2>/dev/null | grep -qiE 'php[0-9]*_module' && x=" mod_php"
+    [ "$s" = EXPOSED ] && { rc=$((rc|4)); cexp=1; }
+    printf '%-26s %-36s php %-8s %-8s image built %s%s\n' "$name" "$img" "$pv" "$s" "${built:-?}" "$x"
+  done
+  [ $withphp = 0 ] && echo "none of $total running containers has PHP"
+  [ $cexp = 1 ] && echo "FIX: pull/rebuild the image and recreate (e.g. docker compose pull && docker compose up -d --force-recreate). A plain restart keeps the old image."
+else
+  if [ "$DOCKER" = 0 ]; then echo "skipped (--no-docker)"
+  elif ! command -v docker >/dev/null 2>&1; then echo "docker not installed - no containers to scan"
+  else echo "WARNING: docker is installed but the daemon is not reachable (run as root or add the user to the docker group) - containers NOT scanned"; rc=$((rc|8)); fi
+fi
