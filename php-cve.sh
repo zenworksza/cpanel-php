@@ -70,8 +70,7 @@ for k in $(printf '%s\n' "${!STATUS[@]}" | sort); do
     alt-php[0-9]*) d=${k#alt-php}; ver="${d:0:1}.${d:1}"
       users=$(selectorctl --list-users --version "$ver" 2>/dev/null | grep -v '^[[:space:]]*$') ;;
     ea-php[0-9]*)
-      users=$(grep -lE "^phpversion: $k\$" /var/cpanel/userdata/*/* 2>/dev/null | awk -F/ '{print $5}' | sort -u) ;;
-    *) printf '%-14s %-8s n/a (internal tooling, no customer accounts)\n' "$k" "${STATUS[$k]}"; continue ;;
+     users=$(selectorctl --list-users --version "$ver" 2>/dev/null | tr ',' ' ' | xargs -r -n1) ;;
   esac
   n=$(printf '%s' "$users" | grep -c .)
   printf '%-14s %-8s %s user(s)' "$k" "${STATUS[$k]}" "$n"
